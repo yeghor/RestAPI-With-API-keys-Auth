@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Body, Depends, Header, HTTPException, Query, Path
 from typing import List, Dict, Any, Optional, Annotated
-from schemas import UserSchema, UserBase
+from schemas import UserSchema, UserBase, JWTTokenReturn
 from construct_unique_api_key import generate_api_key
 from sqlalchemy.orm import Session
 from database import session_local, Base, engine
@@ -58,7 +58,7 @@ def register(username = Header(...), db: Session = Depends(get_db)) -> UserBase:
 
 
 @app.post("/auth/")
-def auth(username = Header(...), api_key = Header(...), db: Session = Depends(get_db)) -> dict:
+def auth(username = Header(...), api_key = Header(...), db: Session = Depends(get_db)) -> JWTTokenReturn:
     token_expiery = int(read_config_expiery_hours())
 
     user = db.query(Users).filter(Users.username == username).first()
@@ -101,8 +101,9 @@ def get_user_info(
     username: Annotated[str, Path(title="Username", example="User-1", min_length=3, max_length=50)],
     auth_token: Annotated[str, Path(title="Your work API token", example="eyJhbv...RwIrjXM")],
     db: Session = Depends(get_db),
-    ):
+    ) -> UserSchema:
     if jwt_token_authorization(username=username, jwt_token=auth_token):
-        return db.query(Users).filter(Users.username == username).first()
+        user =  db.query(Users).filter(Users.username == username).first()
+        return UserSchema(**user.__dict__)
     else:
         raise HTTPException(status_code=401, detail="Unauthorized acces")
