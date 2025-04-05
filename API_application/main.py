@@ -4,12 +4,13 @@ from schemas import UserSchema
 from construct_unique_api_key import generate_api_key
 from sqlalchemy.orm import Session
 from database import session_local, Base, engine
-from models import Users
+from models import Users, JWTs
 from database import Base
 from exceptions import UsernameAlreadyExists
 from jwt_token import encode_jwt
-import json
 from register_user import register_new_user
+from datetime import datetime, timedelta
+
 app = FastAPI()
 Base.metadata.create_all(bind=engine)
 
@@ -41,35 +42,36 @@ def register(username = Header(...), db: Session = Depends(get_db)) -> Dict:
 
 @app.post("/auth/")
 def auth(username = Header(...), api_key = Header(...), db: Session = Depends(get_db)) -> dict:
-    try:
-        user = db.query(Users).filter(Users.username == username).first()
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Username length must be at least 3 characters and must not containt any folowing characters: @,!,?,$,#,%,^,&,(,),[,],{,},;,:,>,<,№,|")
-    except UsernameAlreadyExists:
-        raise HTTPException(status_code=401, detail="This username already taken")
-
+    user = db.query(Users).filter(Users.username == username).first()
+    
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=f"Not found any registered username: {username}")
 
     if user.api_key == api_key:
         jwt_token = encode_jwt(username=username, api_key=api_key)
-        with open("authorized_jwts.json", "r") as file:
-            jwts = json.load(file)
-            token = {"token":jwt_token, "username":username}
-            for item in jwts['tokens']:
-                if item["token"] == token["token"] and item["username"] == username:
-                    return {
-                        "detail": "Youre already authorized",
-                        "authorization_token": jwt_token
+        existing_token: JWTs = db.query(JWTs).filter(JWTs.username == username).first()
+        if existing_token:
+            if datetime.now() < existing_token.expires_at:
+                return {
+                    "detail": "You're already authorized",
+                    "authorization_token": existing_token.jwt_token,
+                    "issued_at": existing_token.issued_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "expires_at": existing_token.expires_at.strftime("%Y-%m-%d %H:%M:%S"),
                     }
-            
-            jwts["tokens"].append(token)
+            else:
+                db.delete(existing_token)
+                db.commit()
 
-            with open("authorized_jwts.json", "w") as file:              
-                json.dump(jwts, file, indent=4)
+        timestamp = datetime.now()
+        expires_at = timestamp + timedelta(hours=2)
+        db.add(JWTs(username=username, jwt_token=jwt_token, expires_at=timestamp+timedelta(hours=2)))
+        db.commit()
+        
         return {
-            "detail": "Your authorization token",
-            "authorization_token": jwt_token
+            "detail": "Your authorization token. Expires in 2 hours",
+            "authorization_token": jwt_token,
+            "issued_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "expires_at": expires_at.strftime("%Y-%m-%d %H:%M:%S"),
             }
     else:
-        raise HTTPException(status_code=401, detail="Unauthorized acces")
+        raise HTTPException(status_code=401, detail="Unauthorized access")
