@@ -1,5 +1,6 @@
 import jwt
 from schemas import UserSchema
+
 def encode_jwt(userinfo: UserSchema):
     payload = {
         "username": userinfo.username,
