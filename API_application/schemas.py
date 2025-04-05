@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, Annotated
 
 class UserSchema(BaseModel):
-    username: str
+    username: str 
     api_key: str
-    date_joined: str
-    requests: int
+    date_joined: Optional[str]
+    requests: Optional[int]

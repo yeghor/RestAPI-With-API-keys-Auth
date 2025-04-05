@@ -1,0 +1,16 @@
+{
+    "tokens": [
+        {
+            "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluIn0.Dm1gk_aoU5q9yAegdMKMAmOx7RR9keZGlgG57OEFkqg",
+            "username": "admin"
+        },
+        {
+            "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6InRlc3QifQ.UxjQ78z_kZkq-R4XS4NtvsMyA6jlQlrdiw5BRwIrjXM",
+            "username": "test"
+        },
+        {
+            "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6InVzZXIifQ.ymeERnTQ4o9Lcdm5XzpB2oIt46NFhoDKGvXywxc7M5M",
+            "username": "user"
+        }
+    ]
+}
