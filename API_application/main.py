@@ -10,6 +10,14 @@ from exceptions import UsernameAlreadyExists
 from jwt_token import encode_jwt
 from register_user import register_new_user
 from datetime import datetime, timedelta
+import configparser
+import os
+
+def read_config():
+    config = configparser.ConfigParser()
+
+    config.read(os.path.join("API_application", "config.ini"))
+    return config.get("General", "jwt_token_expiery_hours")
 
 app = FastAPI()
 Base.metadata.create_all(bind=engine)
@@ -42,6 +50,8 @@ def register(username = Header(...), db: Session = Depends(get_db)) -> Dict:
 
 @app.post("/auth/")
 def auth(username = Header(...), api_key = Header(...), db: Session = Depends(get_db)) -> dict:
+    token_expiery = read_config()
+
     user = db.query(Users).filter(Users.username == username).first()
     
     if not user:
@@ -63,12 +73,12 @@ def auth(username = Header(...), api_key = Header(...), db: Session = Depends(ge
                 db.commit()
 
         timestamp = datetime.now()
-        expires_at = timestamp + timedelta(hours=2)
-        db.add(JWTs(username=username, jwt_token=jwt_token, expires_at=timestamp+timedelta(hours=2)))
+        expires_at = timestamp + timedelta(hours=token_expiery)
+        db.add(JWTs(username=username, jwt_token=jwt_token, expires_at=expires_at))
         db.commit()
         
         return {
-            "detail": "Your authorization token. Expires in 2 hours",
+            "detail": f"Your authorization token. Expires in {token_expiery} hours",
             "authorization_token": jwt_token,
             "issued_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "expires_at": expires_at.strftime("%Y-%m-%d %H:%M:%S"),
