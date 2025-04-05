@@ -48,6 +48,9 @@ def auth(username = Header(...), api_key = Header(...), db: Session = Depends(ge
     except UsernameAlreadyExists:
         raise HTTPException(status_code=401, detail="This username already taken")
 
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
     if user.api_key == api_key:
         jwt_token = encode_jwt(username=username, api_key=api_key)
         with open("authorized_jwts.json", "r") as file:
