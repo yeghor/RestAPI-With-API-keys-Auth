@@ -18,7 +18,7 @@ def register_new_user(username) -> UserSchema:
             raise UsernameAlreadyExists("User with this username allready exists")
 
         datestamp = str(date.today())
-        api_key = generate_api_key()
+        api_key = generate_api_key(salt=username)
         user = Users(api_key=api_key, username=username, date_joined=datestamp, requests=0)
         db.add(user)
         db.commit()
