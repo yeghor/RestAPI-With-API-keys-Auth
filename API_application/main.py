@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Body, Depends, Header, HTTPException
+from fastapi import FastAPI, Body, Depends, Header, HTTPException, Query, Path
 from typing import List, Dict, Any, Optional, Annotated
-from schemas import UserSchema
+from schemas import UserSchema, UserBase
 from construct_unique_api_key import generate_api_key
 from sqlalchemy.orm import Session
 from database import session_local, Base, engine
@@ -13,14 +13,23 @@ from datetime import datetime, timedelta
 import configparser
 import os
 
-def read_config():
+app = FastAPI()
+Base.metadata.create_all(bind=engine)
+
+def read_config_expiery_hours() -> str:
     config = configparser.ConfigParser()
 
     config.read(os.path.join("config.ini"))
     return config.get("General", "jwt_token_expiery_hours")
 
-app = FastAPI()
-Base.metadata.create_all(bind=engine)
+def jwt_token_authorization(username, jwt_token) -> bool:
+    db = session_local()
+    if db.query(JWTs).filter(JWTs.username == username, JWTs.jwt_token == jwt_token).first():
+        db.close()
+        return True
+    else:
+        db.close()
+        False
 
 def get_db():
     db = session_local()
@@ -34,7 +43,7 @@ def test() -> Dict:
     return {"detail": "Hello World"}
 
 @app.post("/register/")
-def register(username = Header(...), db: Session = Depends(get_db)) -> Dict:
+def register(username = Header(...), db: Session = Depends(get_db)) -> UserBase:
     try:
         user = register_new_user(username=username)
     except ValueError:
@@ -50,7 +59,7 @@ def register(username = Header(...), db: Session = Depends(get_db)) -> Dict:
 
 @app.post("/auth/")
 def auth(username = Header(...), api_key = Header(...), db: Session = Depends(get_db)) -> dict:
-    token_expiery = int(read_config())
+    token_expiery = int(read_config_expiery_hours())
 
     user = db.query(Users).filter(Users.username == username).first()
     
@@ -71,6 +80,7 @@ def auth(username = Header(...), api_key = Header(...), db: Session = Depends(ge
             else:
                 db.delete(existing_token)
                 db.commit()
+                raise HTTPException(status_code=403, detail="Token expired")
 
         timestamp = datetime.now()
         expires_at = timestamp + timedelta(hours=token_expiery)
@@ -85,3 +95,14 @@ def auth(username = Header(...), api_key = Header(...), db: Session = Depends(ge
             }
     else:
         raise HTTPException(status_code=401, detail="Unauthorized access")
+
+@app.get("/user_info/{username}/{auth_token}")
+def get_user_info(
+    username: Annotated[str, Path(title="Username", example="User-1", min_length=3, max_length=50)],
+    auth_token: Annotated[str, Path(title="Your work API token", example="eyJhbv...RwIrjXM")],
+    db: Session = Depends(get_db),
+    ):
+    if jwt_token_authorization(username=username, jwt_token=auth_token):
+        return db.query(Users).filter(Users.username == username).first()
+    else:
+        raise HTTPException(status_code=401, detail="Unauthorized acces")
