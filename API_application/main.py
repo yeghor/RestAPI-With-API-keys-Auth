@@ -16,7 +16,7 @@ import os
 def read_config():
     config = configparser.ConfigParser()
 
-    config.read(os.path.join("API_application", "config.ini"))
+    config.read(os.path.join("config.ini"))
     return config.get("General", "jwt_token_expiery_hours")
 
 app = FastAPI()
@@ -50,7 +50,7 @@ def register(username = Header(...), db: Session = Depends(get_db)) -> Dict:
 
 @app.post("/auth/")
 def auth(username = Header(...), api_key = Header(...), db: Session = Depends(get_db)) -> dict:
-    token_expiery = read_config()
+    token_expiery = int(read_config())
 
     user = db.query(Users).filter(Users.username == username).first()
     
