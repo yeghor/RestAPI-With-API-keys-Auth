@@ -22,14 +22,14 @@ def read_config_expiery_hours() -> str:
     config.read(os.path.join("config.ini"))
     return config.get("General", "jwt_token_expiery_hours")
 
-def jwt_token_authorization(username, jwt_token) -> bool:
-    db = session_local()
-    if db.query(JWTs).filter(JWTs.username == username, JWTs.jwt_token == jwt_token).first():
-        db.close()
-        return True
-    else:
-        db.close()
-        False
+def jwt_token_authorization(user: Users, jwt_token: str, db: Session) -> bool:
+    token = db.query(JWTs).filter(JWTs.username == user.username, JWTs.jwt_token == jwt_token).first()
+
+    if not token:
+        return None
+    if datetime.now() > token.expires_at:
+        return False
+    return bool(user)
 
 def get_db():
     db = session_local()
@@ -66,9 +66,12 @@ def auth(username = Header(...), api_key = Header(...), db: Session = Depends(ge
     if not user:
         raise HTTPException(status_code=404, detail=f"Not found any registered username: {username}")
 
+    timestamp = datetime.now()
+    expires_at = timestamp + timedelta(hours=token_expiery)
+
     if user.api_key == api_key:
-        jwt_token = encode_jwt(username=username, api_key=api_key)
-        existing_token: JWTs = db.query(JWTs).filter(JWTs.username == username).first()
+        jwt_token = encode_jwt(username=username, expires_at=expires_at)
+        existing_token: JWTs = db.query(JWTs).filter(JWTs.username == username, JWTs.jwt_token == jwt_token).first()
         if existing_token:
             if datetime.now() < existing_token.expires_at:
                 return {
@@ -81,9 +84,7 @@ def auth(username = Header(...), api_key = Header(...), db: Session = Depends(ge
                 db.delete(existing_token)
                 db.commit()
                 raise HTTPException(status_code=403, detail="Token expired")
-
-        timestamp = datetime.now()
-        expires_at = timestamp + timedelta(hours=token_expiery)
+            
         db.add(JWTs(username=username, jwt_token=jwt_token, expires_at=expires_at))
         db.commit()
         
@@ -96,14 +97,26 @@ def auth(username = Header(...), api_key = Header(...), db: Session = Depends(ge
     else:
         raise HTTPException(status_code=401, detail="Unauthorized access")
 
-@app.get("/user_info/{username}/{auth_token}")
+@app.get("/user_info/{username}")
 def get_user_info(
-    username: Annotated[str, Path(title="Username", example="User-1", min_length=3, max_length=50)],
-    auth_token: Annotated[str, Path(title="Your work API token", example="eyJhbv...RwIrjXM")],
+    username: Annotated[str, Path(..., title="Username", example="User-1", min_length=3, max_length=50)],
+    auth_token: Annotated[str, Header(..., title="Your work API token", example="eyJhbv...RwIrjXM")],
     db: Session = Depends(get_db),
     ) -> UserSchema:
-    if jwt_token_authorization(username=username, jwt_token=auth_token):
-        user =  db.query(Users).filter(Users.username == username).first()
-        return UserSchema(**user.__dict__)
+    
+    user =  db.query(Users).filter(Users.username == username).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized acces")
+    
+    if jwt_token_authorization(user=user, jwt_token=auth_token, db=db):
+        user.requests += 1
+        user_collection = {
+            "username": user.username,
+            "api_key": user.api_key,
+            "date_joined": user.date_joined,
+            "requests": user.requests
+        }
+        db.commit()
+        return UserSchema(**user_collection)
     else:
         raise HTTPException(status_code=401, detail="Unauthorized acces")

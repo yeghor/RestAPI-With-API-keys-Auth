@@ -6,8 +6,8 @@ class UserBase(BaseModel):
     api_key: str = Field(title="Security API key. Need to access personal JWT work token")
 
 class UserSchema(UserBase):
-    date_joined: Optional[str] = Field(title="User join to system date")
-    requests: Optional[int] = Field(default=None, title="Amount of user requests")
+    date_joined: str = Field(title="User join to system date")
+    requests: int = Field(default=0, title="Amount of user requests")
 
 class JWTTokenReturn(BaseModel):
     detail: str = Field(title="Additional response details")
