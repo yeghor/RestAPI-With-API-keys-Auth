@@ -7,11 +7,10 @@ def get_jwt_secret_key():
     config.read(os.path.join("config.ini"))
     return config.get("General", "secret_key")
 
-def encode_jwt(username: str, expires_at):
+def encode_jwt(username: str):
     secret_key = get_jwt_secret_key()
     payload = {
         "username": username,
-        "expires_at": expires_at.strftime("%Y-%m-%d %H:%M:%S") 
     }
     return jwt.encode(payload, secret_key, algorithm="HS256")
 

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Body, Depends, Header, HTTPException, Query, Path
 from typing import List, Dict, Any, Optional, Annotated
-from schemas import UserSchema, UserBase, JWTTokenReturn
+from schemas import UserSchema, UserBase, JWTTokenReturn, TitanicPassenger
 from construct_unique_api_key import generate_api_key
 from sqlalchemy.orm import Session
 from database import session_local, Base, engine
@@ -12,6 +12,8 @@ from register_user import register_new_user
 from datetime import datetime, timedelta
 import configparser
 import os
+import random
+import json
 
 app = FastAPI()
 Base.metadata.create_all(bind=engine)
@@ -51,10 +53,12 @@ def register(username = Header(...), db: Session = Depends(get_db)) -> UserBase:
     except UsernameAlreadyExists:
         raise HTTPException(status_code=401, detail="This username already taken")
     
-    return {
-        "detail": f"New user ({user.username}) succesfuly created. DON'T LOSE YOUR API KEY FOLLOWED BELOW",
-        "api_key": user.api_key
-    }
+    user_collection = {
+            "username": user.username,
+            "api_key": user.api_key,
+        }  
+
+    return UserBase(**user_collection)
 
 
 @app.post("/auth/")
@@ -70,7 +74,7 @@ def auth(username = Header(...), api_key = Header(...), db: Session = Depends(ge
     expires_at = timestamp + timedelta(hours=token_expiery)
 
     if user.api_key == api_key:
-        jwt_token = encode_jwt(username=username, expires_at=expires_at)
+        jwt_token = encode_jwt(username=username)
         existing_token: JWTs = db.query(JWTs).filter(JWTs.username == username, JWTs.jwt_token == jwt_token).first()
         if existing_token:
             if datetime.now() < existing_token.expires_at:
@@ -87,7 +91,6 @@ def auth(username = Header(...), api_key = Header(...), db: Session = Depends(ge
             
         db.add(JWTs(username=username, jwt_token=jwt_token, expires_at=expires_at))
         db.commit()
-        
         return {
             "detail": f"Your authorization token. Expires in {token_expiery} hours",
             "authorization_token": jwt_token,
@@ -96,7 +99,7 @@ def auth(username = Header(...), api_key = Header(...), db: Session = Depends(ge
             }
     else:
         raise HTTPException(status_code=401, detail="Unauthorized access")
-
+    
 @app.get("/user_info/{username}")
 def get_user_info(
     username: Annotated[str, Path(..., title="Username", example="User-1", min_length=3, max_length=50)],
@@ -118,5 +121,45 @@ def get_user_info(
         }
         db.commit()
         return UserSchema(**user_collection)
+    else:
+        raise HTTPException(status_code=401, detail="Unauthorized acces")
+    
+@app.get("/delete_account/")
+def delete_account(
+    username = Annotated[str, Header(..., title="Username", example="User-1", min_length=3, max_length=50)],
+    api_key = Annotated[str, Header(..., title="Your personal api_key")],
+    db: Session = Depends(get_db),
+    ) -> UserSchema:
+    user: Users = db.query(Users).filter(Users.username == username, Users.api_key == api_key).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized acces")
+    db.delete(user) 
+    user_collection = {
+            "username": user.username,
+            "api_key": user.api_key,
+            "date_joined": user.date_joined,
+            "requests": user.requests
+        }    
+   
+    db.commit()
+
+    return UserSchema(**user_collection)
+
+@app.get("/random_titanic_passenger/")
+def get_passenget(
+    username: Annotated[str, Header(..., title="Username", example="User-1", min_length=3, max_length=50)],
+    auth_token: Annotated[str, Header(..., title="Your work API token", example="eyJhbv...RwIrjXM")],
+    db: Session = Depends(get_db)
+    ) -> TitanicPassenger:
+    user = db.query(Users).filter(Users.username == username).first()
+    if jwt_token_authorization(jwt_token=auth_token, db=db, user=user):
+        user.requests += 1
+        db.commit()
+        filepath = os.path.join("titanic.json")
+        with open(filepath, "r", encoding="utf-8") as file:
+            data = json.load(file)
+            data_pass = data[random.randint(0, len(data))]
+            print(data_pass)
+            return TitanicPassenger(**data_pass)
     else:
         raise HTTPException(status_code=401, detail="Unauthorized acces")
